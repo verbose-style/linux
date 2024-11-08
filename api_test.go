@@ -2,9 +2,10 @@ package linux_test
 
 import (
 	"encoding/json"
-	"linux"
 	"os"
 	"testing"
+
+	"verbose.style/linux"
 )
 
 func TestLinux(t *testing.T) {
