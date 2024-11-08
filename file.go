@@ -59,6 +59,15 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 // Stat returns metadata for the file located at the given path.
 func (f *File) Stat() (FileHeader, error) { return f.Linux.StatFile(f.Descriptor) }
 
+// MapIntoMemory maps the entire file into memory and returns it.
+func (f *File) MapIntoMemory(mtype MapType, prot MemoryProtection, flags Map) (MappedMemory, error) {
+	head, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return f.Linux.MapFileIntoMemory(nil, int(head.Size), prot, mtype, flags, f.Descriptor, 0)
+}
+
 // Close the file.
 func (f *File) Close() error {
 	if !f.Closed.Swap(true) {
@@ -74,14 +83,14 @@ const MaxRead Bytes = 0x7ffff000
 type FileCreationFlags int
 
 const (
-	FileCloseOnExecute   FileCreationFlags = syscall.O_CLOEXEC   // close the file automatically on [Kernel.Execute].
-	FileCreateIfNeeded   FileCreationFlags = syscall.O_CREAT     // create the file if it does not exist.
-	FileAssertDirectory  FileCreationFlags = syscall.O_DIRECTORY // fail to open if the path is not a directory.
-	FileAssertCreation   FileCreationFlags = syscall.O_EXCL      // fail to open if the file already exists.
-	FileIsNotTheTerminal FileCreationFlags = syscall.O_NOCTTY    // if the pathname is a terminal, it shouldn't become the controlling terminal for the process.
-	FileTrapSymbolicLink FileCreationFlags = syscall.O_NOFOLLOW  // if the trailing component is a symbolic link, don't follow it, open it directly.
-	FileTemporaryInside  FileCreationFlags = 020000000           // creates an unnamed temporary file inside the provided directory
-	FileTruncatedToZero  FileCreationFlags = syscall.O_TRUNC     // resets the file to length 0, writes will overwrite any existing content.
+	FileCloseOnExecute   FileCreationFlags = 0x80000  // close the file automatically on [Kernel.Execute].
+	FileCreateIfNeeded   FileCreationFlags = 0x40     // create the file if it does not exist.
+	FileAssertDirectory  FileCreationFlags = 0x10000  // fail to open if the path is not a directory.
+	FileAssertCreation   FileCreationFlags = 0x80     // fail to open if the file already exists.
+	FileIsNotTheTerminal FileCreationFlags = 0x100    // if the pathname is a terminal, it shouldn't become the controlling terminal for the process.
+	FileTrapSymbolicLink FileCreationFlags = 0x20000  // if the trailing component is a symbolic link, don't follow it, open it directly.
+	FileTemporaryInside  FileCreationFlags = 0x410000 // creates an unnamed temporary file inside the provided directory
+	FileTruncatedToZero  FileCreationFlags = 0x200    // resets the file to length 0, writes will overwrite any existing content.
 )
 
 // FileStatusFlags affect the semantics of subsequent I/O operations. These can be retrieved and (in some cases) modified;
@@ -89,15 +98,14 @@ const (
 type FileStatusFlags int
 
 const (
-	FileAppend                FileStatusFlags = syscall.O_APPEND    // append data to the end of the file when writing.
-	FileAsync                 FileStatusFlags = syscall.O_ASYNC     // emit [SignalIO] whenever input or output becomes available.
-	FileDirect                FileStatusFlags = syscall.O_DIRECT    // avoid cache where possible and use underlying hardware directly
-	FileSyncData              FileStatusFlags = syscall.O_DSYNC     // all [File.Write] operations are automatically followed by a [File.SyncData].
-	FileSize64                FileStatusFlags = syscall.O_LARGEFILE // allow 64bit files on 32bit systems
-	FileDoNotUpdateAccessTime FileStatusFlags = syscall.O_NOATIME   // request that the access time of the file is not updated on [File.Read]
-	FileNonBlocking           FileStatusFlags = syscall.O_NONBLOCK  // return "resource temporarily unavailable" if a read/write would block
-	FilePath                  FileStatusFlags = 010000000           // file is opened as a reference-only, no read/write operations are allowed.
-	FileSync                  FileStatusFlags = syscall.O_SYNC      // all [File.Write] operations are automatically followed by a [File.Sync].
+	FileAppend                FileStatusFlags = 0x400    // append data to the end of the file when writing.
+	FileAsync                 FileStatusFlags = 0x2000   // emit [SignalIO] whenever input or output becomes available.
+	FileDirect                FileStatusFlags = 0x4000   // avoid cache where possible and use underlying hardware directly
+	FileSyncData              FileStatusFlags = 0x1000   // all [File.Write] operations are automatically followed by a [File.SyncData].
+	FileDoNotUpdateAccessTime FileStatusFlags = 0x40000  // request that the access time of the file is not updated on [File.Read]
+	FileNonBlocking           FileStatusFlags = 0x800    // return "resource temporarily unavailable" if a read/write would block
+	FilePath                  FileStatusFlags = 0x200000 // file is opened as a reference-only, no read/write operations are allowed.
+	FileSync                  FileStatusFlags = 0x101000 // all [File.Write] operations are automatically followed by a [File.Sync].
 )
 
 // FilePermissions mode bits.
@@ -105,15 +113,15 @@ type FilePermissions uint32
 
 const (
 	FileReadableByUser   FilePermissions = syscall.S_IRUSR // file is readable by its owner
+	FileReadableByGroup  FilePermissions = syscall.S_IRGRP // file is readable by its group
+	FileReadableByOthers FilePermissions = syscall.S_IROTH // file is readable by others
+
 	FileWritableByUser   FilePermissions = syscall.S_IWUSR // file is writable by its owner
-	FileExecutableByUser FilePermissions = syscall.S_IXUSR // file is executable by its owner
+	FileWritableByGroup  FilePermissions = syscall.S_IWGRP // file is writable by its group
+	FileWritableByOthers FilePermissions = syscall.S_IWOTH // file is writable by others
 
-	FileReadableByGroup   FilePermissions = syscall.S_IRGRP // file is readable by its group
-	FileWritableByGroup   FilePermissions = syscall.S_IWGRP // file is writable by its group
-	FileExecutableByGroup FilePermissions = syscall.S_IXGRP // file is executable by its group
-
-	FileReadableByOthers   FilePermissions = syscall.S_IROTH // file is readable by others
-	FileWritableByOthers   FilePermissions = syscall.S_IWOTH // file is writable by others
+	FileExecutableByUser   FilePermissions = syscall.S_IXUSR // file is executable by its owner
+	FileExecutableByGroup  FilePermissions = syscall.S_IXGRP // file is executable by its group
 	FileExecutableByOthers FilePermissions = syscall.S_IXOTH // file is executable by others
 
 	FileExecutesAsOwner FilePermissions = syscall.S_ISUID // file will be executed as if it were executed by the owner of the file

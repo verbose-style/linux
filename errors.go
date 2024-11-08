@@ -122,3 +122,17 @@ type SeekError Error[struct {
 	Overflow SeekError `value too large for defined data type` // resulting offset is too large to fit in an int64.
 	Illegal  SeekError `illegal seek`                          // pipes/sockets are not seekable.
 }]
+
+// MapError returned by [API.MapFileIntoMemory] operations.
+type MapError Error[struct {
+	AccessDenied  MapError `permission denied`                     // non-regular file or [FileAccessMode] is incompatible with [MemoryProtection]
+	Locked        MapError `resource temporarily unavailable`      // file is locked, or too much locked memory in-use.
+	BadFile       MapError `bad file descriptor`                   // file is not valid and [MapAnonymous] not set.
+	AlreadyExists MapError `file exists`                           // [MapExactAddressOnce] is set and the address is already mapped.
+	Invalid       MapError `invalid argument`                      // addr, length or offset is invalid and/or [MapType] missing.
+	TooManyFiles  MapError `too many open files`                   // process has too many files open.
+	Unsupported   MapError `no such device`                        // file system does not support mapping.
+	OutOfMemory   MapError `cannot allocate memory`                // kernel is out of memory, and/or addr exceeds the virtual address space.
+	Overflow      MapError `value too large for defined data type` // resulting offset is too large to fit in an int64.
+	NotPermitted  MapError `operation not permitted`               // file is not readable or writable, and/or process huge page capabilities.
+}]

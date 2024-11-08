@@ -2,8 +2,10 @@
 package linux
 
 import (
+	"io"
 	"structs"
 	"time"
+	"unsafe"
 )
 
 // API specification.
@@ -30,7 +32,50 @@ type API struct {
 	Poll func(files []FileToPoll, timeout time.Duration) (int, error)
 	// Seek changes the offset of the file descriptor to the given offset.
 	Seek func(fd FileDescriptor, offset int64, whence SeekWhence) (int64, error)
+	// MapFileIntoMemory maps the specified file into memory, using the optionally
+	// specified pointer as a hint on where to map it in. If addr is nil, a suitable
+	// address is chosen by the kernel. Offset must be a multiple of the system's
+	// page size. When files are large, this will be more efficient than reading the
+	// file into memory.
+	MapFileIntoMemory func(addr unsafe.Pointer, length int, prot MemoryProtection, mtype MapType, flags Map, fd FileDescriptor, offset uintptr) (MappedMemory, error)
 }
+
+type MemoryProtection int // use by [API.MapFileIntoMemory] abd [API.ProtectMemory]
+
+const (
+	MemoryNotAccessible  MemoryProtection = 0x0 // no access allowed.
+	MemoryAllowReads     MemoryProtection = 0x1 // read access allowed.
+	MemoryAllowWrites    MemoryProtection = 0x2 // write access allowed.
+	MemoryAllowExecution MemoryProtection = 0x4 // execute access allowed.
+	MemoryAllowAtomics   MemoryProtection = 0x8 // atomic operations allowed.
+)
+
+type MapType int // used by [API.MapFileIntoMemory]
+
+const (
+	MapShared              MapType = 0x01 // persist writes back to the file.
+	MapPrivate             MapType = 0x02 // copy-on-write memory.
+	MapSharedValidateFlags MapType = 0x03 // [MapShared] + validate flags.
+)
+
+type Map int // used by [API.MapFileIntoMemory]
+
+const (
+	MapAnonymous        Map = 0x20       // file must be -1, just allocate anonymous memory.
+	Map32Bit            Map = 0x40       // allocate memory in the first 4GB of the address space.
+	MapExactAddress     Map = 0x10       // addr must be page-aligned and will be used directly.
+	MapExactAddressOnce Map = 0x100000   // like [MapExactAddress] but goroutine-safe.
+	MapGrowsDown        Map = 0x100      // touching the first page will grow the mapping down by a single page/
+	MapHugeTables       Map = 0x40000    // use huge pages.
+	MapHuge2MB          Map = 0x54000000 // use 2MB huge pages.
+	MapHuge1GB          Map = 0x78000000 // use 1GB huge pages.
+	MapKeepAwayFromSwap Map = 0x2000     // lock the pages in physical memory (do not swap).
+	MapDoNotReserveSwap Map = 0x4000     // do not reserve swap space.
+	MapPopulate         Map = 0x8000     // eagerly load the file into the map.
+	MapStack            Map = 0x20000    // ensure memory is suitably setup to use for a stack.
+	MapSync             Map = 0x80000    // for files that support direct mapping of persistent memory.
+	MapUninitialized    Map = 0x4000000  // don't zero out pages, subject to the system secutiry policy.
+)
 
 // FileToPoll is used for [API.Poll] and configures which events to wait for.
 type FileToPoll struct {
@@ -80,4 +125,15 @@ type Time struct { //cc:timespec
 
 	Seconds int64
 	Nanos   int64
+}
+
+// MappedMemory from a [File].
+type MappedMemory interface {
+	io.ReaderAt
+	io.WriterAt
+	io.Closer
+
+	Len() int
+
+	UnsafePointer() unsafe.Pointer
 }

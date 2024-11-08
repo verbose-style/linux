@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"verbose.style/linux"
+	"verbose.style/linux/internal"
 )
 
 func TestLinux(t *testing.T) {
@@ -17,7 +18,20 @@ func TestLinux(t *testing.T) {
 	}
 	json.NewEncoder(os.Stdout).Encode(header)
 
-	if _, err := Linux.Stat("./nothing"); err != new(linux.StatError).Types().DoesNotExist {
+	f, err := Linux.Open("./api_test.go", linux.FileAccessReadOnly, 0, 0, 0)
+	if err != nil {
 		t.Fatal(err)
 	}
+
+	mmap, err := Linux.MapFileIntoMemory(nil, int(header.Size), linux.MemoryAllowReads, linux.MapPrivate, 0, f.Descriptor, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mmap.WriteAt([]byte{1}, 0); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestValues(t *testing.T) {
+	internal.Test(t)
 }

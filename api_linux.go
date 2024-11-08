@@ -51,6 +51,46 @@ func Native() *API {
 			o, err := syscall.Seek(int(fd), offset, int(whence))
 			return int64(o), new(SeekError).parse(err)
 		},
+		MapFileIntoMemory: func(addr unsafe.Pointer, length int, prot MemoryProtection, mtype MapType, flags Map, fd FileDescriptor, offset uintptr) (MappedMemory, error) {
+			memory, err := syscall.Mmap(int(fd), int64(offset), length, int(prot), int(mtype)|int(flags))
+			return mmap{prot, memory}, new(MapError).parse(err)
+		},
 	}
 	return os
+}
+
+type mmap struct {
+	check MemoryProtection
+	slice []byte
+}
+
+func (m mmap) ReadAt(p []byte, off int64) (n int, err error) {
+	if m.check&MemoryAllowReads == 0 {
+		return 0, new(MapError).parse(syscall.EACCES)
+	}
+	copy(p, m.slice[off:])
+	return len(p), nil
+}
+
+func (m mmap) WriteAt(p []byte, off int64) (n int, err error) {
+	if m.check&MemoryAllowWrites == 0 {
+		return 0, new(MapError).parse(syscall.EACCES)
+	}
+	copy(m.slice[off:], p)
+	return len(p), nil
+}
+
+func (m mmap) Close() error {
+	return syscall.Munmap(m.slice)
+}
+
+func (m mmap) Len() int {
+	return len(m.slice)
+}
+
+func (m mmap) UnsafePointer() unsafe.Pointer {
+	if len(m.slice) == 0 {
+		return nil
+	}
+	return unsafe.Pointer(&m.slice[0])
 }
