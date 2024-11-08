@@ -2,6 +2,7 @@ package linux_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
@@ -23,13 +24,19 @@ func TestLinux(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mmap, err := Linux.MapFileIntoMemory(nil, int(header.Size), linux.MemoryAllowReads, linux.MapPrivate, 0, f.Descriptor, 0)
+	mmap, err := Linux.MapIntoMemory(nil, int(header.Size), linux.MemoryAllowReads, linux.MapPrivate, 0, f.Descriptor, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mmap.WriteAt([]byte{1}, 0); err == nil {
 		t.Fatal("expected error")
 	}
+
+	heap, err := Linux.Heap(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(heap)
 }
 
 func TestValues(t *testing.T) {

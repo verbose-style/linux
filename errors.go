@@ -136,3 +136,15 @@ type MapError Error[struct {
 	Overflow      MapError `value too large for defined data type` // resulting offset is too large to fit in an int64.
 	NotPermitted  MapError `operation not permitted`               // file is not readable or writable, and/or process huge page capabilities.
 }]
+
+// ProtectMemoryError returned by [API.ProtectMemory] operations.
+type ProtectMemoryError Error[struct {
+	AccessDenied ProtectMemoryError `permission denied`      // mapped file [FileAccessMode] is incompatible with [MemoryProtection].
+	Invalid      ProtectMemoryError `invalid argument`       // addr is not aligned to page size, is invalid or flags are invalid.
+	OutOfMemory  ProtectMemoryError `cannot allocate memory` // kernel is out of memory
+}]
+
+// HeapError returned by [API.Heap] operations.
+type HeapError Error[struct {
+	OutOfMemory HeapError `cannot allocate memory` // no more memory available.
+}]

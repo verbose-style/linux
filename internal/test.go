@@ -2,15 +2,19 @@ package internal
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"verbose.style/linux"
 )
 
 // #include <linux/fcntl.h>
-// #include <linux/stat.h>
+// #include <sys/stat.h>
 // #include <linux/unistd.h>
 // #include <linux/mman.h>
+// #include <linux/poll.h>
+// #include <linux/fs.h>
+// #include <linux/time.h>
 import "C"
 
 func assert[T comparable](t *testing.T, a, b T) {
@@ -18,6 +22,43 @@ func assert[T comparable](t *testing.T, a, b T) {
 	if a != b {
 		t.Fatal(fmt.Sprintf("%v != %v", a, b))
 	}
+}
+
+func assertTypes(t *testing.T, atype, btype reflect.Type) {
+	t.Helper()
+	if atype.Size() != btype.Size() {
+		t.Fatal(fmt.Sprintf("%v != %v", atype.Size(), btype.Size()))
+	}
+	if atype.Align() != btype.Align() {
+		t.Fatal(fmt.Sprintf("%v != %v", atype.Align(), btype.Align()))
+	}
+	if atype.Kind() != btype.Kind() {
+		t.Fatal(fmt.Sprintf("%v != %v", atype.Kind(), btype.Kind()))
+	}
+	switch atype.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		fallthrough
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if atype.Bits() != btype.Bits() {
+			t.Fatal(fmt.Sprintf("%v != %v", atype, btype))
+		}
+	}
+	if atype.Kind() == reflect.Struct {
+		var j int
+		for i := 0; i < atype.NumField(); i++ {
+			afield := atype.Field(i)
+			if afield.Type.Size() == 0 {
+				continue
+			}
+			assertTypes(t, afield.Type, btype.Field(j).Type)
+			j++
+		}
+	}
+}
+
+func assertLayout[A, B any](t *testing.T) {
+	t.Helper()
+	assertTypes(t, reflect.TypeFor[A](), reflect.TypeFor[B]())
 }
 
 func Test(t *testing.T) {
@@ -84,6 +125,24 @@ func Test(t *testing.T) {
 	assert(t, linux.MapStack, C.MAP_STACK)
 	assert(t, linux.MapSync, C.MAP_SYNC)
 	assert(t, linux.MapUninitialized, C.MAP_UNINITIALIZED)
+	var _ linux.Poll
+	assert(t, linux.PollHasReadAvailable, C.POLLIN)
+	assert(t, linux.PollHasPriority, C.POLLPRI)
+	assert(t, linux.PollHasWriteAvailable, C.POLLOUT)
+	assert(t, linux.PollHasPeerFinishedWriting, C.POLLRDHUP)
+	assert(t, linux.PollHasPeerConnectionClosed, C.POLLHUP)
+	assert(t, linux.PollHasError, C.POLLERR)
+	assert(t, linux.PollHasInvalidRequest, C.POLLNVAL)
+	var _ linux.Seek
+	assert(t, linux.SeekRelativeToStart, C.SEEK_SET)
+	assert(t, linux.SeekRelative, C.SEEK_CUR)
+	assert(t, linux.SeekRelativeToEnd, C.SEEK_END)
+	assert(t, linux.SeekHole, C.SEEK_HOLE)
+	assert(t, linux.SeekData, C.SEEK_DATA)
+
+	assertLayout[linux.Time, C.struct_timespec](t)
+	assertLayout[linux.FileHeader, C.struct_stat](t)
+	assertLayout[linux.FileToPoll, C.struct_pollfd](t)
 
 	assert(t, linux.FileRelativeToWorkingDirectory, C.AT_FDCWD)
 }

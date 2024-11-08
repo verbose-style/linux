@@ -53,7 +53,7 @@ func (f *File) Write(p []byte) (int, error) {
 
 // Seek implements [io.Seeker]
 func (f *File) Seek(offset int64, whence int) (int64, error) {
-	return f.Linux.Seek(f.Descriptor, offset, SeekWhence(whence))
+	return f.Linux.Seek(f.Descriptor, offset, Seek(whence))
 }
 
 // Stat returns metadata for the file located at the given path.
@@ -65,7 +65,7 @@ func (f *File) MapIntoMemory(mtype MapType, prot MemoryProtection, flags Map) (M
 	if err != nil {
 		return nil, err
 	}
-	return f.Linux.MapFileIntoMemory(nil, int(head.Size), prot, mtype, flags, f.Descriptor, 0)
+	return f.Linux.MapIntoMemory(nil, int(head.Size), prot, mtype, flags, f.Descriptor, 0)
 }
 
 // Close the file.

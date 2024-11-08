@@ -31,13 +31,21 @@ type API struct {
 	// the next file that has events available. Timeout has millisecond precision.
 	Poll func(files []FileToPoll, timeout time.Duration) (int, error)
 	// Seek changes the offset of the file descriptor to the given offset.
-	Seek func(fd FileDescriptor, offset int64, whence SeekWhence) (int64, error)
-	// MapFileIntoMemory maps the specified file into memory, using the optionally
+	Seek func(fd FileDescriptor, offset int64, whence Seek) (int64, error)
+	// MapIntoMemory maps the specified file into memory, using the optionally
 	// specified pointer as a hint on where to map it in. If addr is nil, a suitable
 	// address is chosen by the kernel. Offset must be a multiple of the system's
 	// page size. When files are large, this will be more efficient than reading the
-	// file into memory.
-	MapFileIntoMemory func(addr unsafe.Pointer, length int, prot MemoryProtection, mtype MapType, flags Map, fd FileDescriptor, offset uintptr) (MappedMemory, error)
+	// file into memory. If fd is -1 and [MapAnonymous] is used, [MapIntoMemory] can
+	// be used as a general memory allocation mechanism.
+	MapIntoMemory func(addr unsafe.Pointer, length int, prot MemoryProtection, mtype MapType, flags Map, fd FileDescriptor, offset uintptr) (MappedMemory, error)
+	// ProtectMemory changes the memory protection of any pages within the given memory region. The
+	// addr must be page-aligned.
+	ProtectMemory func(addr unsafe.Pointer, length int, prot MemoryProtection) error
+	// Heap can be used to adjust the heap of the process, as such it can be used as
+	// a general memory allocation mechanism. Unsafe to use when GODEBUG=sbrk=1. A
+	// nil pointer returns the current end of the heap.
+	Heap func(addr unsafe.Pointer) (unsafe.Pointer, error)
 }
 
 type MemoryProtection int // use by [API.MapFileIntoMemory] abd [API.ProtectMemory]
@@ -79,6 +87,8 @@ const (
 
 // FileToPoll is used for [API.Poll] and configures which events to wait for.
 type FileToPoll struct {
+	_ structs.HostLayout
+
 	File   FileDescriptor // file descriptor to wait for events on.
 	Notify Poll           // requested notifications to wait for.
 	Result Poll           // filled in by [API.Poll].
@@ -88,39 +98,39 @@ type FileToPoll struct {
 type Poll int16
 
 const (
-	HasReadAvailable        Poll = 0x001  // chance to try [File.Read]
-	HasPriority             Poll = 0x002  // priority has been passed to the file.
-	HasWriteAvailable       Poll = 0x004  // chance to try [File.Write]
-	HasPeerFinishedWriting  Poll = 0x2000 // remote socket peer shutdown write side.
-	HasPeerConnectionClosed Poll = 0x010  // remote socket peer closed connection.
+	PollHasReadAvailable        Poll = 0x001  // chance to try [File.Read]
+	PollHasPriority             Poll = 0x002  // priority has been passed to the file.
+	PollHasWriteAvailable       Poll = 0x004  // chance to try [File.Write]
+	PollHasPeerFinishedWriting  Poll = 0x2000 // remote socket peer shutdown write side.
+	PollHasPeerConnectionClosed Poll = 0x010  // remote socket peer closed connection.
 
-	HasError          Poll = 0x008 // only available in [FileToPoll.Result]
-	HasInvalidRequest Poll = 0x020 // only available in [FileToPoll.Result]
+	PollHasError          Poll = 0x008 // only available in [FileToPoll.Result]
+	PollHasInvalidRequest Poll = 0x020 // only available in [FileToPoll.Result]
 )
 
-// SeekWhence is used for [API.Seek] to specify where and whence to seek.
-type SeekWhence int
+// Seek is used for [API.Seek] to specify where and whence to seek.
+type Seek int
 
 const (
-	SeekRelativeToStart SeekWhence = 0 // seek relative to the start of the file.
-	SeekRelative        SeekWhence = 1 // seek relative to the current offset of the file.
-	SeekRelativeToEnd   SeekWhence = 1 // seek relative to the end of the file.
-	SeekHole            SeekWhence = 2 // seek to the next hole greater than or equal to the given offset.
-	SeekData            SeekWhence = 3 // seek to the next data greater than or equal to the given offset.
+	SeekRelativeToStart Seek = 0 // seek relative to the start of the file.
+	SeekRelative        Seek = 1 // seek relative to the current offset of the file.
+	SeekRelativeToEnd   Seek = 2 // seek relative to the end of the file.
+	SeekHole            Seek = 4 // seek to the next hole greater than or equal to the given offset.
+	SeekData            Seek = 3 // seek to the next data greater than or equal to the given offset.
 )
 
 type Bytes = int64
 
 type Path string
 
-type DeviceID uint64 //cc:dev_t
+type DeviceID uint64
 
-type IndexNode uint64 //cc:ino_t
+type IndexNode uint64
 
-type UserID uint32  //cc:uid_t
-type GroupID uint32 //cc:gid_t
+type UserID uint32
+type GroupID uint32
 
-type Time struct { //cc:timespec
+type Time struct {
 	_ structs.HostLayout
 
 	Seconds int64

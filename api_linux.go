@@ -47,13 +47,23 @@ func Native() *API {
 			i, _, err := syscall.Syscall(syscall.SYS_POLL, uintptr(unsafe.Pointer(&files[0])), uintptr(len(files)), uintptr(timeout))
 			return int(i), new(PollError).parse(err)
 		},
-		Seek: func(fd FileDescriptor, offset int64, whence SeekWhence) (int64, error) {
+		Seek: func(fd FileDescriptor, offset int64, whence Seek) (int64, error) {
 			o, err := syscall.Seek(int(fd), offset, int(whence))
 			return int64(o), new(SeekError).parse(err)
 		},
-		MapFileIntoMemory: func(addr unsafe.Pointer, length int, prot MemoryProtection, mtype MapType, flags Map, fd FileDescriptor, offset uintptr) (MappedMemory, error) {
+		MapIntoMemory: func(addr unsafe.Pointer, length int, prot MemoryProtection, mtype MapType, flags Map, fd FileDescriptor, offset uintptr) (MappedMemory, error) {
 			memory, err := syscall.Mmap(int(fd), int64(offset), length, int(prot), int(mtype)|int(flags))
 			return mmap{prot, memory}, new(MapError).parse(err)
+		},
+		ProtectMemory: func(addr unsafe.Pointer, length int, prot MemoryProtection) error {
+			return new(ProtectMemoryError).parse(syscall.Mprotect(unsafe.Slice((*byte)(addr), length), int(prot)))
+		},
+		Heap: func(addr unsafe.Pointer) (unsafe.Pointer, error) {
+			ptr, _, err := syscall.Syscall(syscall.SYS_BRK, uintptr(addr), 0, 0)
+			if err == 0 {
+				return unsafe.Pointer(ptr), nil
+			}
+			return nil, new(HeapError).parse(err)
 		},
 	}
 	return os
